@@ -6,8 +6,12 @@
 #include "wifi.h"
 #include "mqtt.h"
 #include "led_indicator.h"
+#include "aht20_sensor.h"
+#include "device_id.h"
 
 static const char *TAG = "main";
+
+#define PUBLISH_INTERVAL_MS  30000
 
 void app_main(void) {
     ESP_LOGI(TAG, "Init LED indicator");
@@ -28,6 +32,10 @@ void app_main(void) {
 
     esp_mqtt_client_handle_t mqtt_client = NULL;
     ESP_ERROR_CHECK(mqtt_init(&mqtt_client));
+    const char *node = device_id_get();
+
+    ESP_ERROR_CHECK(aht20_sensor_init());
+    ESP_ERROR_CHECK(aht20_sensor_start_task(mqtt_client, node, PUBLISH_INTERVAL_MS));
 
     while (1) {
         if (wifi_is_connected()) {
