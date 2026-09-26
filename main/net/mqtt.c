@@ -2,6 +2,8 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include <string.h>
+#include "device_id.h"
+#include "ha_discovery.h"
 
 static const char *TAG = "mqtt";
 
@@ -23,6 +25,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Connected to broker");
             is_connected = true;
+            
+            const char *node = device_id_get();
+
+            ha_device_t dev = {
+                .name       = "Sensor",
+                .model      = "ESP32-AHT20",
+                .sw_version = "1.0.0",
+            };
+
+            ha_add_sensor(client, &dev, node, "temperature", "Температура", "°C", "temperature");
+            ha_add_sensor(client, &dev, node, "humidity",    "Влажность",    "%",  "humidity");
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -48,6 +61,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 }
 
 esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
+    const char *node_name = device_id_get();
+
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
             .address.uri = CONFIG_MQTT_BROKER_URI,
@@ -59,7 +74,7 @@ esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
                 .key = (const char *)client_key_pem_start,
             },
         },
-        .credentials.client_id = CONFIG_MQTT_NODE_NAME,
+        .credentials.client_id = node_name,
         .session.keepalive = 60,
     };
 
