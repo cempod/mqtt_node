@@ -11,7 +11,42 @@ menu "MQTT node configuration"
     config ESP_WIFI_PASSWORD
         string "Wi-Fi Password"
         default "MyPassword"
+endmenu
+
+menu "LED indicator"
+
+    choice ESP_BOARD_LED_TYPE
+        prompt "LED type"
+        default ESP_BOARD_LED_TYPE_RGB
+
+        config ESP_BOARD_LED_TYPE_NONE
+            bool "No LED"
+
+        config ESP_BOARD_LED_TYPE_RGB
+            bool "Addressable RGB (WS2812)"
+
+        config ESP_BOARD_LED_TYPE_GPIO
+            bool "Plain GPIO LED"
+    endchoice
+
     config ESP_BOARD_RGB_LED_PIN
-        int "RGB_LED_PIN"
-        default 38
+        int "Addressable LED GPIO"
+        depends on ESP_BOARD_LED_TYPE_RGB
+        default 48
+
+    config ESP_BOARD_GPIO_LED_PIN
+        int "LED GPIO"
+        depends on ESP_BOARD_LED_TYPE_GPIO
+        default 8
+
+    config ESP_BOARD_GPIO_LED_ACTIVE_LOW
+        bool "LED is active-low"
+        depends on ESP_BOARD_LED_TYPE_GPIO
+        default n
+
+    config ESP_BOARD_GPIO_LED_PWM
+        bool "Use PWM (LEDC)"
+        depends on ESP_BOARD_LED_TYPE_GPIO
+        default y
+
 endmenu

@@ -2,7 +2,7 @@ idf_component_register(SRCS "main.c"
                             "net/wifi.c"
                             "net/mqtt.c"
                             "system/led_indicator.c"
-                    PRIV_REQUIRES mqtt nvs_flash esp_netif esp_wifi
+                    PRIV_REQUIRES mqtt nvs_flash esp_netif esp_wifi esp_driver_gpio esp_driver_ledc
                     INCLUDE_DIRS "."
                                 "net"
                                 "system"
