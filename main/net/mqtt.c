@@ -16,6 +16,8 @@ extern const uint8_t server_cert_pem_end[]   asm("_binary_ca_crt_end");
 
 bool is_connected = false;
 
+static char s_status_topic[128];
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = event_data;
@@ -25,6 +27,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Connected to broker");
             is_connected = true;
+
+            esp_mqtt_client_publish(client, s_status_topic,
+                            "online", 0, 1, 1);
             
             const char *node = device_id_get();
 
@@ -34,8 +39,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                 .sw_version = "1.0.0",
             };
 
-            ha_add_sensor(client, &dev, node, "temperature", "Температура", "°C", "temperature");
-            ha_add_sensor(client, &dev, node, "humidity",    "Влажность",    "%",  "humidity");
+            ha_add_sensor(client, &dev, node, "temperature", "Температура", "°C", "temperature", "measurement");
+            ha_add_sensor(client, &dev, node, "humidity",    "Влажность",    "%",  "humidity", "measurement");
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -62,6 +67,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
 esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
     const char *node_name = device_id_get();
+    ha_status_topic(s_status_topic, sizeof(s_status_topic), node_name);
 
     const esp_mqtt_client_config_t mqtt_cfg = {
         .broker = {
@@ -75,7 +81,21 @@ esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
             },
         },
         .credentials.client_id = node_name,
-        .session.keepalive = 60,
+        .session = {
+            .keepalive = 60,
+            .disable_clean_session = false,
+            .last_will = {
+                .topic   = s_status_topic,
+                .msg     = "offline",
+                .msg_len = 7,
+                .qos     = 1,
+                .retain  = 1,
+            },
+        },
+        .network = {
+            .reconnect_timeout_ms = 5000,
+            .timeout_ms = 10000,
+        },
     };
 
     *client = esp_mqtt_client_init(&mqtt_cfg);

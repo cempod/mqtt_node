@@ -15,7 +15,8 @@ void ha_add_sensor(esp_mqtt_client_handle_t client,
                    const char *object_id,
                    const char *friendly_name,
                    const char *unit,
-                   const char *device_class);
+                   const char *device_class,
+                   const char *state_class);
 
 void ha_add_binary_sensor(esp_mqtt_client_handle_t client,
                           const ha_device_t *dev,
@@ -32,5 +33,6 @@ void ha_add_switch(esp_mqtt_client_handle_t client,
 
 void ha_state_topic  (char *buf, size_t n, const char *node, const char *object_id);
 void ha_command_topic(char *buf, size_t n, const char *node, const char *object_id);
+void ha_status_topic (char *buf, size_t n, const char *node);
 
 #endif
