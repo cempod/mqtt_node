@@ -46,8 +46,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "Disconnected, trying to reconnect...");
             is_connected = false;
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            esp_mqtt_client_reconnect(client);
             break;
 
         case MQTT_EVENT_ERROR:

@@ -1,4 +1,56 @@
 dependencies:
+  espressif/aht20:
+    component_hash: 76e613c248fd7533483e592f995a72dbefadf396447a2e3570645b3da80abb7c
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    - name: espressif/i2c_bus
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.4.0
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.0.0
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
+  espressif/cmake_utilities:
+    component_hash: 05165f30922b422b4b90c08845e6d449329b97370fbd06309803d8cb539d79e3
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.1.1
+  espressif/i2c_bus:
+    component_hash: 483112c1619c54c38d0b734fb25f1678733267858a77b7af2f48cc7db6dbbd84
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: '*'
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.5.2
   espressif/led_strip:
     component_hash: 28621486f77229aaf81c71f5e15d6fbf36c2949cf11094e07090593e659e7639
     dependencies:
@@ -24,9 +76,11 @@ dependencies:
       type: idf
     version: 6.0.2
 direct_dependencies:
+- espressif/aht20
+- espressif/cjson
 - espressif/led_strip
 - espressif/mqtt
 - idf
-manifest_hash: ee10d00fab00b79a32ff665e79e05ad67d37cb4bfe384bd661860f7566e28e09
-target: esp32s3
+manifest_hash: 5642196ddfadda0637061b674300af124246f44320b0654086c4dc1a9969b00b
+target: esp32c3
 version: 3.0.0
