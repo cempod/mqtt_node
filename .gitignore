@@ -79,3 +79,8 @@ Desktop.ini
 
 *.crt
 *.key
+
+.notes/
+.env*
+*.keystore
+*.jks
