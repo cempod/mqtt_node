@@ -17,3 +17,4 @@ dependencies:
   espressif/mqtt: '*'
   espressif/led_strip: '*'
   espressif/aht20: '*'
+  espressif/cjson: '*'

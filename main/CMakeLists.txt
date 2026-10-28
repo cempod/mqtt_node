@@ -5,7 +5,7 @@ idf_component_register(SRCS "main.c"
                             "net/ha_discovery.c"
                             "system/led_indicator.c"
                             "system/device_id.c"
-                    PRIV_REQUIRES mqtt nvs_flash esp_netif esp_wifi esp_driver_gpio esp_driver_ledc i2c_bus
+                    PRIV_REQUIRES mqtt nvs_flash esp_netif esp_wifi esp_driver_gpio esp_driver_ledc i2c_bus cjson
                     INCLUDE_DIRS "."
                                 "net"
                                 "system"

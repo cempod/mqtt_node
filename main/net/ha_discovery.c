@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "esp_log.h"
+#include "cJSON.h"
 
 static const char *TAG = "ha_disc";
 
@@ -17,34 +18,71 @@ void ha_status_topic(char *buf, size_t n, const char *node) {
     snprintf(buf, n, "%s/status", node);
 }
 
-static int append_availability(char *buf, size_t cap, int off, const char *node) {
-    if (off < 0 || (size_t)off >= cap) return -1;
+static void add_opt_string(cJSON *obj, const char *key, const char *val) {
+    if (val) cJSON_AddStringToObject(obj, key, val);
+}
 
-    char topic[128];
-    ha_status_topic(topic, sizeof(topic), node);
+static cJSON *base_config(const ha_device_t *dev,
+                          const char *node,
+                          const char *object_id,
+                          const char *friendly_name) {
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return NULL;
 
-    int w = snprintf(buf + off, cap - (size_t)off,
-        ",\"availability_topic\":\"%s\","
-        "\"payload_available\":\"online\","
-        "\"payload_not_available\":\"offline\"",
-        topic);
+    char buf[160];
 
-    if (w < 0 || (size_t)(off + w) >= cap) return -1;
-    return off + w;
+    cJSON_AddStringToObject(root, "name", friendly_name);
+
+    snprintf(buf, sizeof(buf), "%s_%s", node, object_id);
+    cJSON_AddStringToObject(root, "unique_id", buf);
+
+    ha_state_topic(buf, sizeof(buf), node, object_id);
+    cJSON_AddStringToObject(root, "state_topic", buf);
+
+    ha_status_topic(buf, sizeof(buf), node);
+    cJSON_AddStringToObject(root, "availability_topic", buf);
+    cJSON_AddStringToObject(root, "payload_available", "online");
+    cJSON_AddStringToObject(root, "payload_not_available", "offline");
+
+    cJSON *device = cJSON_AddObjectToObject(root, "device");
+    cJSON *ids    = cJSON_AddArrayToObject(device, "identifiers");
+    cJSON_AddItemToArray(ids, cJSON_CreateString(node));
+    add_opt_string(device, "name",       dev->name);
+    add_opt_string(device, "model",      dev->model);
+    add_opt_string(device, "sw_version", dev->sw_version);
+
+    return root;
 }
 
 static void publish_config(esp_mqtt_client_handle_t client,
                            const char *component,
                            const char *node,
                            const char *object_id,
-                           const char *payload) {
-    char topic[192];
-    snprintf(topic, sizeof(topic),
-             "homeassistant/%s/%s/%s/config",
-             component, node, object_id);
+                           cJSON *root) {
+    if (!root) {
+        ESP_LOGE(TAG, "no memory for %s config", object_id);
+        return;
+    }
 
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
-    ESP_LOGI(TAG, "→ %s", topic);
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!payload) {
+        ESP_LOGE(TAG, "serialize failed: %s", object_id);
+        return;
+    }
+
+    char topic[192];
+    int n = snprintf(topic, sizeof(topic),
+                     "homeassistant/%s/%s/%s/config",
+                     component, node, object_id);
+    if (n < 0 || (size_t)n >= sizeof(topic)) {
+        ESP_LOGE(TAG, "topic too long: %s", object_id);
+    } else {
+        esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+        ESP_LOGI(TAG, "→ %s", topic);
+    }
+
+    cJSON_free(payload);
 }
 
 void ha_add_sensor(esp_mqtt_client_handle_t client,
@@ -55,45 +93,13 @@ void ha_add_sensor(esp_mqtt_client_handle_t client,
                    const char *unit,
                    const char *device_class,
                    const char *state_class) {
-    char state[128];
-    ha_state_topic(state, sizeof(state), node, object_id);
-
-    char payload[768];
-    int n = snprintf(payload, sizeof(payload),
-        "{"
-            "\"name\":\"%s\","
-            "\"unique_id\":\"%s_%s\","
-            "\"state_topic\":\"%s\"",
-        friendly_name, node, object_id, state);
-
-    if (unit)
-        n += snprintf(payload + n, sizeof(payload) - n,
-                      ",\"unit_of_measurement\":\"%s\"", unit);
-
-    if (device_class)
-        n += snprintf(payload + n, sizeof(payload) - n,
-                      ",\"device_class\":\"%s\"", device_class);
-
-    if (state_class)
-        n += snprintf(payload + n, sizeof(payload) - n,
-                      ",\"state_class\":\"%s\"", state_class);
-
-    n = append_availability(payload, sizeof(payload), n, node);
-    if (n < 0) { 
-        ESP_LOGE(TAG, "truncated %s", object_id); 
-        return; 
+    cJSON *root = base_config(dev, node, object_id, friendly_name);
+    if (root) {
+        add_opt_string(root, "unit_of_measurement", unit);
+        add_opt_string(root, "device_class",        device_class);
+        add_opt_string(root, "state_class",         state_class);
     }
-
-    n += snprintf(payload + n, sizeof(payload) - n,
-        ",\"device\":{"
-            "\"identifiers\":[\"%s\"],"
-            "\"name\":\"%s\","
-            "\"model\":\"%s\","
-            "\"sw_version\":\"%s\""
-        "}}",
-        node, dev->name, dev->model, dev->sw_version);
-
-    publish_config(client, "sensor", node, object_id, payload);
+    publish_config(client, "sensor", node, object_id, root);
 }
 
 void ha_add_binary_sensor(esp_mqtt_client_handle_t client,
@@ -102,37 +108,11 @@ void ha_add_binary_sensor(esp_mqtt_client_handle_t client,
                           const char *object_id,
                           const char *friendly_name,
                           const char *device_class) {
-    char state[128];
-    ha_state_topic(state, sizeof(state), node, object_id);
-
-    char payload[768];
-    int n = snprintf(payload, sizeof(payload),
-        "{"
-            "\"name\":\"%s\","
-            "\"unique_id\":\"%s_%s\","
-            "\"state_topic\":\"%s\"",
-        friendly_name, node, object_id, state);
-
-    if (device_class)
-        n += snprintf(payload + n, sizeof(payload) - n,
-                      ",\"device_class\":\"%s\"", device_class);
-
-    n = append_availability(payload, sizeof(payload), n, node);
-    if (n < 0) { 
-        ESP_LOGE(TAG, "truncated %s", object_id); 
-        return; 
+    cJSON *root = base_config(dev, node, object_id, friendly_name);
+    if (root) {
+        add_opt_string(root, "device_class", device_class);
     }
-
-    n += snprintf(payload + n, sizeof(payload) - n,
-        ",\"device\":{"
-            "\"identifiers\":[\"%s\"],"
-            "\"name\":\"%s\","
-            "\"model\":\"%s\","
-            "\"sw_version\":\"%s\""
-        "}}",
-        node, dev->name, dev->model, dev->sw_version);
-
-    publish_config(client, "binary_sensor", node, object_id, payload);
+    publish_config(client, "binary_sensor", node, object_id, root);
 }
 
 void ha_add_switch(esp_mqtt_client_handle_t client,
@@ -140,34 +120,11 @@ void ha_add_switch(esp_mqtt_client_handle_t client,
                    const char *node,
                    const char *object_id,
                    const char *friendly_name) {
-    char state[128], command[128];
-    ha_state_topic  (state,   sizeof(state),   node, object_id);
-    ha_command_topic(command, sizeof(command), node, object_id);
-
-    char payload[768];
-    int n = snprintf(payload, sizeof(payload),
-        "{"
-            "\"name\":\"%s\","
-            "\"unique_id\":\"%s_%s\","
-            "\"state_topic\":\"%s\","
-            "\"command_topic\":\"%s\"",
-        friendly_name, node, object_id, state, command);
-
-    n = append_availability(payload, sizeof(payload), n, node);
-    if (n < 0) {
-        ESP_LOGE(TAG, "truncated %s", object_id);
-        return;
+    cJSON *root = base_config(dev, node, object_id, friendly_name);
+    if (root) {
+        char command[160];
+        ha_command_topic(command, sizeof(command), node, object_id);
+        cJSON_AddStringToObject(root, "command_topic", command);
     }
-
-    n += snprintf(payload + n, sizeof(payload) - n,
-        ",\"device\":{"
-            "\"identifiers\":[\"%s\"],"
-            "\"name\":\"%s\","
-            "\"model\":\"%s\","
-            "\"sw_version\":\"%s\""
-        "}"
-        "}",
-        node, dev->name, dev->model, dev->sw_version);
-
-    publish_config(client, "switch", node, object_id, payload);
+    publish_config(client, "switch", node, object_id, root);
 }
