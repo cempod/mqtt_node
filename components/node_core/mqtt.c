@@ -14,7 +14,8 @@ extern const uint8_t client_key_pem_end[]    asm("_binary_client_key_end");
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_crt_start");
 extern const uint8_t server_cert_pem_end[]   asm("_binary_ca_crt_end");
 
-bool is_connected = false;
+static volatile bool       s_connected = false;
+static mqtt_connected_cb_t s_on_connected;
 
 static char s_status_topic[128];
 
@@ -26,26 +27,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Connected to broker");
-            is_connected = true;
+            s_connected = true;
 
             esp_mqtt_client_publish(client, s_status_topic,
                             "online", 0, 1, 1);
-            
-            const char *node = device_id_get();
 
-            ha_device_t dev = {
-                .name       = "Sensor",
-                .model      = "ESP32-AHT20",
-                .sw_version = "1.0.0",
-            };
-
-            ha_add_sensor(client, &dev, node, "temperature", "Температура", "°C", "temperature", "measurement");
-            ha_add_sensor(client, &dev, node, "humidity",    "Влажность",    "%",  "humidity", "measurement");
+            if (s_on_connected) s_on_connected(client);
             break;
 
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "Disconnected, trying to reconnect...");
-            is_connected = false;
+            s_connected = false;
             break;
 
         case MQTT_EVENT_ERROR:
@@ -63,7 +55,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     }
 }
 
-esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
+esp_err_t mqtt_init(esp_mqtt_client_handle_t *client, mqtt_connected_cb_t on_connected) {
+    s_on_connected = on_connected;
     const char *node_name = device_id_get();
     ha_status_topic(s_status_topic, sizeof(s_status_topic), node_name);
 
@@ -114,5 +107,5 @@ esp_err_t mqtt_init(esp_mqtt_client_handle_t *client) {
 }
 
 bool mqtt_is_connected(void) {
-    return is_connected;
+    return s_connected;
 }

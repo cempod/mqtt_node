@@ -1,49 +1,60 @@
 #include "wifi.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
+#include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_timer.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
+#include "sdkconfig.h"
 
 #define WIFI_SSID      CONFIG_ESP_WIFI_SSID
 #define WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
 
+#define RETRY_MIN_MS   1000
+#define RETRY_MAX_MS   30000
+
 static const char *TAG = "wifi";
 
-static EventGroupHandle_t s_wifi_event_group;
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
+static volatile bool      s_connected = false;
+static uint32_t           s_retry_ms  = RETRY_MIN_MS;
+static esp_timer_handle_t s_retry_timer;
 
-static bool s_connected = false;
+static void retry_cb(void *arg)
+{
+    esp_wifi_connect();
+}
 
 static void event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        ESP_LOGI(TAG, "Wi-Fi started, connecting...");
+        ESP_LOGI(TAG, "Wi-Fi started, connecting to %s...", WIFI_SSID);
         esp_wifi_connect();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *event = (wifi_event_sta_disconnected_t *)event_data;
         s_connected = false;
-        ESP_LOGW(TAG, "Disconnected from AP, reconnecting...");
-        esp_wifi_connect();
+        ESP_LOGW(TAG, "Disconnected (reason %d), retry in %lu ms",
+                 event->reason, (unsigned long)s_retry_ms);
+        esp_timer_stop(s_retry_timer);
+        esp_timer_start_once(s_retry_timer, (uint64_t)s_retry_ms * 1000);
+        s_retry_ms *= 2;
+        if (s_retry_ms > RETRY_MAX_MS) s_retry_ms = RETRY_MAX_MS;
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_ms  = RETRY_MIN_MS;
         s_connected = true;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
-esp_err_t wifi_init_sta(void)
+esp_err_t wifi_start(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
+    const esp_timer_create_args_t timer_args = {
+        .callback = retry_cb,
+        .name     = "wifi_retry",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &s_retry_timer));
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -76,21 +87,8 @@ esp_err_t wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_ps(WIFI_PS_NONE);
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdFALSE,
-                                           pdFALSE,
-                                           portMAX_DELAY);
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to AP %s", WIFI_SSID);
-        return ESP_OK;
-    } else {
-        ESP_LOGE(TAG, "Failed to connect to AP %s", WIFI_SSID);
-        return ESP_FAIL;
-    }
+    ESP_LOGI(TAG, "wifi_start finished, connecting in background");
+    return ESP_OK;
 }
 
 bool wifi_is_connected(void)

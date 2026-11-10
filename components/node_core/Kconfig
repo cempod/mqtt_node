@@ -1,7 +1,17 @@
 menu "MQTT node configuration"
     config MQTT_NODE_NAME
         string "Node name"
-        default "MQTT node"
+        default "node"
+        help
+            Used as hostname and device_id prefix. Only [A-Za-z0-9_-].
+    config NODE_DEVICE_MODEL
+        string "Device model shown in Home Assistant"
+        default "ESP32 node"
+    config NODE_CERT_GROUP
+        string "Client certificate group"
+        default "aht20"
+        help
+            Client cert/key are taken from certs/<group>/client.{crt,key}.
     config MQTT_BROKER_URI
         string "MQTT Broker URI"
         default "mqtts://192.168.1.100:8883"

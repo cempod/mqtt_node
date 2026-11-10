@@ -1,0 +1,32 @@
+menu "AHT20 sensor"
+
+    config NODE_AHT20
+        bool "Enable AHT20 temperature/humidity sensor"
+        default n
+
+    if NODE_AHT20
+
+        config NODE_AHT20_I2C_PORT
+            int "I2C port"
+            range 0 1
+            default 0
+
+        config NODE_AHT20_SDA_PIN
+            int "SDA GPIO"
+            default 6
+
+        config NODE_AHT20_SCL_PIN
+            int "SCL GPIO"
+            default 7
+
+        config NODE_AHT20_I2C_FREQ_HZ
+            int "I2C frequency (Hz)"
+            default 100000
+
+        config NODE_AHT20_INTERVAL_MS
+            int "Publish interval (ms)"
+            default 30000
+
+    endif
+
+endmenu
